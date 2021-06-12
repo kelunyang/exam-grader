@@ -1,24 +1,8 @@
-# exam-grader
+# Google問卷成績計算機
 
-## Project setup
-```
-npm install
-```
-
-### Compiles and hot-reloads for development
-```
-npm run serve
-```
-
-### Compiles and minifies for production
-```
-npm run build
-```
-
-### Lints and fixes files
-```
-npm run lint
-```
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+1. 簡單的說就是把Google上的答卷算個成績
+2. 玩法就和電腦卡讀卡的使用邏輯差不多，挑一份答卷當作範本，其他人都跟這份比較
+3. 支援單選題、多選題
+4. 只要你的線上測驗系統支援CSV輸出，其實都可以在這裡算
+5. 測試網址： http://kelunyang.ddns.net/examGrader
+6. 任何問題歡迎在Issue區留言
