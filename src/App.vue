@@ -2,6 +2,32 @@
   <v-app>
     <v-sheet>
       <v-dialog
+        v-model="syntaxW"
+        fullscreen
+        hide-overlay
+        transition="dialog-bottom-transition"
+      >
+        <v-card>
+          <v-toolbar
+            dark
+            color="primary"
+          >
+            <v-btn
+              icon
+              dark
+              @click="importGrading"
+            >
+              <v-icon>fa-times-circle</v-icon>
+            </v-btn>
+            <v-toolbar-title>匯出／匯入配分資料</v-toolbar-title>
+          </v-toolbar>
+          <v-card-text class='d-flex flex-column ma-1'>
+            <v-alert type="info" icon="fa-info">這裡的操作方法非常簡單，請你自己把下面這段程式碼全選（Ctrl+A），複製（Ctrl+C）下來，貼到記事本裡存好，下次要用先清除下面文字框的內容後，貼上（Ctrl+V）你備份的設定即可，打完收工</v-alert>
+            <tip-tap v-model="exportSyntax" />
+          </v-card-text>
+        </v-card>
+      </v-dialog>
+      <v-dialog
         v-model="firsttimeW"
         fullscreen
         hide-overlay
@@ -240,13 +266,14 @@
               </v-list-item>
               <v-btn class='ma-3 red accent-4 white--text' large @click='buildGrading'>設定配分</v-btn>
               <v-btn class='ma-3 red accent-4 white--text' large @click='startGrading'>改考卷啦！</v-btn>
+              <v-btn class='ma-3 blue accent-4 white--text' large @click='exportGrading'>匯入／匯出配分[非必要動作]</v-btn>
             </v-card-text>
           </v-card>
         </v-tab-item>
         <v-tab-item>
           <v-card flat>
             <v-card-text class='d-flex flex-column ma-1'>
-              <v-btn class='ma-3 red accent-4 white--text flex-grow-1' large @click='downloadGrading'>點此下載成績單</v-btn>
+              <v-btn class='ma-3 red accent-4 white--text' large @click='downloadGrading'>點此下載成績單</v-btn>
               <v-simple-table>
                 <template v-slot:default>
                   <thead>
@@ -293,12 +320,7 @@
             <v-card-text clas='d-flex flex-column ma-1'>
               <div class='text-body-1'>Developer: Kelunyang @ ZLSH</div>
               <div class='text-body-1'>GitHub: <a href="https://github.com/kelunyang/exam-grader" target="_blank">https://github.com/kelunyang/exam-grader</a></div>
-              <div>本程式採用Vue.js + Electorn製作，有Windows編譯版本，但實際上和網頁版效能沒有差異，唯一的差別只有為了保證網頁版也能編譯，上面這個GitHub連結我沒有用electron專用語法</div>
-              <div class='text-body1'>ToDos:</div>
-              <ol>
-                <li>匯入匯出考卷設定</li>
-              </ol>
-              <div clas='text-caption'>有什麼願望希望實現，歡迎到GitHub丟Issue喔</div>
+              <div class='text-caption'>本程式採用Vue.js + Electorn製作，有Windows編譯版本，但實際上和網頁版效能沒有差異，唯一的差別只有為了保證網頁版也能編譯，上面這個GitHub連結我沒有用electron專用語法，有什麼願望希望實現，歡迎到GitHub丟Issue喔</div>
             </v-card-text>
           </v-card>
         </v-tab-item>
@@ -307,6 +329,22 @@
   </v-app>
 </template>
 
+<style>
+@import url('https://fonts.googleapis.com/css?family=Noto+Sans+TC:100,300,400,500,700,900&display=swap');
+html {
+  scroll-behavior: smooth;
+}
+#app {
+  font-family: 'Noto Sans TC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+h1 {
+  font-family: 'Noto Sans TC', sans-serif;
+  font-weight: 900;
+}
+</style>
+
 <script>
 import _ from 'lodash';
 import moment from 'moment';
@@ -314,11 +352,15 @@ import { v4 as uuidv4 } from 'uuid';
 import stripAllBom from 'strip-all-bom';
 import Papa from 'papaparse';
 import {Decimal} from 'decimal.js';
-import '@fortawesome/fontawesome-free/css/all.css'
-import '@fortawesome/fontawesome-free/js/all.js'
+import '@fortawesome/fontawesome-free/css/all.css';
+import '@fortawesome/fontawesome-free/js/all.js';
+import TipTap from './components/TipTap.vue';
 
 export default {
   name: "exam-grader",
+  components: {
+    TipTap,
+  },
   computed: {
     totalScores: function() {
       return _.sumBy(this.answerSheet.results, (item) => {
@@ -327,6 +369,16 @@ export default {
     }
   },
   methods: {
+    importGrading: function() {
+      let syntax = this.exportSyntax.replace(/<pre><code class="language-javascript">/, '');
+      syntax = syntax.replace(/<\/code><\/pre>/, '');
+      this.gradingSets = JSON.parse(syntax);
+      this.syntaxW = false;
+    },
+    exportGrading: function() {
+      this.exportSyntax = '<pre><code class="language-javascript">' + JSON.stringify(this.gradingSets) + '</code></pre>';
+      this.syntaxW = true;
+    },
     floatConverter: function(num) {
       let floatNum = new Decimal(num);
       return floatNum.toFixed(1);
@@ -336,9 +388,15 @@ export default {
       for(let i=0; i<this.gradingSheets.length; i++) {
         let currentSheet = this.gradingSheets[i];
         let exportItem = {
-          '編號': currentSheet.id,
-          '總分': currentSheet.totalScores
+          '編號': currentSheet.id
         }
+        if(this.idColumn >= 0) {
+          exportItem['帳號'] = currentSheet.name;
+        }
+        if(this.tickColumn >= 0) {
+          exportItem['日期'] = this.timeConverter(currentSheet.tick);
+        }
+        exportItem['總分'] = currentSheet.totalScores;
         for(let k=0; k<currentSheet.results.length; k++) {
           let currentAnswer = currentSheet.results[k];
           exportItem[currentAnswer.title] = currentAnswer.type === 0 ? currentAnswer.content : currentAnswer.content.join(',');
@@ -557,6 +615,9 @@ export default {
     }
   },
   data: () => ({
+    exportSyntax: '<pre><code class="language-javascript">{ "json": true }</code></pre>',
+    syntaxW: false,
+    syntaxEditor: null,
     dateFormat: "YYYY/MM/DD h:mm:ss a Z",
     gradingWait: true,
     singleRange: -1,
