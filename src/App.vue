@@ -22,7 +22,7 @@
             <v-toolbar-title>匯出／匯入配分資料</v-toolbar-title>
           </v-toolbar>
           <v-card-text class='d-flex flex-column ma-1'>
-            <v-alert type="info" icon="fa-info">這裡的操作方法非常簡單，請你自己把下面這段程式碼全選（Ctrl+A），複製（Ctrl+C）下來，貼到記事本裡存好，下次要用先清除下面文字框的內容後，貼上（Ctrl+V）你備份的設定即可，打完收工</v-alert>
+            <v-alert type="info" icon="fa-info">這裡的操作方法非常簡單，請你自己把下面這段程式碼全選（Ctrl+A），複製（Ctrl+C）下來，貼到記事本裡存好，下次要用先清除下面文字框的內容後，貼上（Ctrl+V）你備份的設定即可，打完收工（提醒：匯入完，還是要按下「設定配分」喔！）</v-alert>
             <tip-tap v-model="exportSyntax" />
           </v-card-text>
         </v-card>
@@ -106,7 +106,7 @@
                     :key="item.id"
                   >
                     <td>{{ workingSheet.results[n].content }}</td>
-                    <td :class='workingSheet.results[n].scoreGet === workingSheet.results[n].scoreSet ? "green darken-4" : "red darken-4"' class='white--text'>{{ floatConverter(workingSheet.results[n].scoreGet) }}</td>
+                    <td :class='workingSheet.results[n].scoreGet === workingSheet.results[n].scoreSet ? "green darken-4" : workingSheet.results[n].scoreGet > 0 ? "light-blue darken-4" : "red darken-4"' class='white--text'>{{ floatConverter(workingSheet.results[n].scoreGet) }}</td>
                     <td>{{ item.content }}</td>
                   </tr>
                 </tbody>
@@ -208,6 +208,8 @@
               <v-alert type="info" icon="fa-info" v-if='csvData.length === 0'>請選擇你從Google問卷匯出的CSV檔案</v-alert>
               <v-alert type="info" icon="fa-info" v-if='csvData.length > 0'>這張考卷有{{ csvData.length }}題，被你切割為{{ gradingSets.length }}種題型，目前總分為{{ totalScores }}，待批改的答卷有：{{ gradingSheets.length }}張</v-alert>
               <v-alert type="error" icon="fa-skull" v-if='csvError !== ""'>{{ csvError }}</v-alert>
+              <v-alert type="error" icon="fa-skull" v-if='duplicatedHeader > 0'>這張考卷居然有 {{ duplicatedHeader }} 題題目一模一樣，這會導致電腦根本無法判讀題目順序，請修正題目（隨便在題目後面補個123）再匯入一遍</v-alert>
+              <div class='text-body-1'>選擇CSV檔案</div>
               <v-file-input accept="text/csv" prepend-icon='fa-file-csv' outlined v-model="csvFile" />
               <div class='text-body-1'>題目從哪一欄開始？</div>
               <v-select
@@ -273,7 +275,8 @@
         <v-tab-item>
           <v-card flat>
             <v-card-text class='d-flex flex-column ma-1'>
-              <v-btn class='ma-3 red accent-4 white--text' large @click='downloadGrading'>點此下載成績單</v-btn>
+              <v-alert type="info" icon="fa-info" v-if='gradingSheets.length > 0'>你可以在此下載成績單，當然你可能會希望有一顆按鍵能幫你匯入成績回到Google Classroom，技術上來說Google API完全可以這樣做，但實測結果發現程式得把全班名單下載下來，你還是得一筆一筆去設定成績和學生的對應，如此不如直接把成績單給你，你手動去GC上輸入（或做其他處理）還比較划算，因此直接匯入的工程取消</v-alert>
+              <v-btn class='ma-3 red accent-4 white--text' large v-if='gradingSheets.length > 0' @click='downloadGrading'>點此下載成績單</v-btn>
               <v-simple-table>
                 <template v-slot:default>
                   <thead>
@@ -584,22 +587,38 @@ export default {
         if (this.csvFile !== undefined) {
           let reader = new FileReader();
           reader.readAsText(oriobj.csvFile);
-          reader.onload = ((content) => { 
+          reader.onload = ((content) => {
             try {
               content = stripAllBom(content.target.result);
+              oriobj.csvError = '';
               Papa.parse(content, {
-                header: true,
+                header: false,
                 skipEmptyLines: true,
                 complete: async function(result) {
                   if(result.data.length > 0) {
-                    let headers = Object.keys(result.data[0]);
+                    let headers = result.data[0];
                     oriobj.csvHeaders = [];
+                    oriobj.duplicatedHeader = 0;
                     for(let i=0; i<headers.length; i++) {
+                      let foundDuplicated = _.filter(headers, (item) => {
+                        return item === headers[i]
+                      })
+                      if(foundDuplicated.length > 1) {
+                        oriobj.duplicatedHeader++;
+                      }
                       oriobj.csvHeaders.push({
                         text: headers[i],
                         value: i
                       });
                     }
+                  }
+                }
+              });
+              Papa.parse(content, {
+                header: true,
+                skipEmptyLines: true,
+                complete: async function(result) {
+                  if(result.data.length > 0) {
                     oriobj.csvData = result.data;
                   } else {
                     oriobj.csvError = 'CSV是空的';
@@ -615,6 +634,7 @@ export default {
     }
   },
   data: () => ({
+    duplicatedHeader: 0,
     exportSyntax: '<pre><code class="language-javascript">{ "json": true }</code></pre>',
     syntaxW: false,
     syntaxEditor: null,
